@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TELEGRAM MATCH PREDICTOR BOT - Version avec indicateur clignotant "EN LIGNE"
+TELEGRAM MATCH PREDICTOR BOT - Version  clignotant "EN LIGNE"
 """
 
 import requests
