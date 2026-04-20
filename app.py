@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TELEGRAM MATCH PREDICTOR BOT - Version Améliorée
+TELEGRAM MATCH PREDICTOR BOT - Version avec indicateur clignotant "EN LIGNE"
 """
 
 import requests
@@ -29,6 +29,7 @@ MATCH_STATE_FILE = 'match_state.json'
 last_greeting_day = None
 last_status_message_id = None
 status_animation_frame = 0
+is_bot_online = True
 
 # ==================== FONCTIONS TELEGRAM ====================
 
@@ -70,57 +71,88 @@ def edit_message(message_id, text, keyboard=None):
     except:
         pass
 
-# ==================== MESSAGE DE STATUT EN LIGNE ====================
+# ==================== INDICATEUR CLIGNOTANT "EN LIGNE" ====================
 
-def send_status_message():
-    """Envoie le message de statut qui sera mis à jour toutes les 5 secondes"""
+def send_online_indicator():
+    """Envoie l'indicateur de statut en ligne qui clignote"""
     global last_status_message_id
     
-    message = """🟢 <b>BOT EN LIGNE</b>
+    message = """
+🟢 <b>╔══════════════════════════════════════════════════════════╗</b>
+🟢 <b>║                                                          ║</b>
+🟢 <b>║           🤖 BOT PRONOSTICS - EN LIGNE 🤖                ║</b>
+🟢 <b>║                                                          ║</b>
+🟢 <b>╚══════════════════════════════════════════════════════════╝</b>
 
-🔄 EN RECHERCHE DE NOUVEAUX MATCHS...
-⏳ Vérification du site : chaque seconde
+<b>◐ RECHERCHE EN COURS... ◐</b>
 
-📊 Statut actif depuis le démarrage
+⏳ Scan du site : <u>chaque seconde</u>
+⚽ Matchs trouvés : <b>0</b>
+📡 Statut : <b>ACTIF 24h/24</b>
+
+┌──────────────────────────────────────────────────────────┐
+│  💡 Le bot surveille automatiquement les matchs         │
+│  🔔 Un message sera envoyé dès qu'un match apparaît     │
+└──────────────────────────────────────────────────────────┘
 """
     keyboard = {
         'inline_keyboard': [
-            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}]
+            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}],
+            [{'text': '🔄 STATUT', 'callback_data': 'status'}]
         ]
     }
     
-    if last_status_message_id:
-        edit_message(last_status_message_id, message, keyboard)
-    else:
-        msg_id = send_message(message, keyboard)
-        if msg_id:
-            last_status_message_id = msg_id
+    msg_id = send_message(message, keyboard)
+    if msg_id:
+        last_status_message_id = msg_id
 
-def update_status_animation():
-    """Met à jour l'animation du message de statut toutes les 5 secondes"""
-    global last_status_message_id, status_animation_frame
+def update_online_indicator():
+    """Met à jour l'indicateur clignotant toutes les secondes"""
+    global last_status_message_id, status_animation_frame, today_matches_cache
     
     if not last_status_message_id:
         return
     
     status_animation_frame += 1
+    # Animation clignotante
     frames = ["◐", "◓", "◑", "◒"]
+    dots = ["⚫", "🟢", "⚫", "🟢"]
     frame = frames[status_animation_frame % 4]
+    dot = dots[status_animation_frame % 4]
     
     now = datetime.now()
     
-    message = f"""🟢 <b>BOT EN LIGNE</b>
+    # Changer la couleur selon l'état
+    if is_fetching:
+        status_icon = "🟡"
+        status_text = "SCAN EN COURS"
+    else:
+        status_icon = "🟢"
+        status_text = "ACTIF"
+    
+    message = f"""
+{status_icon} <b>╔══════════════════════════════════════════════════════════╗</b>
+{status_icon} <b>║                                                          ║</b>
+{status_icon} <b>║           🤖 BOT PRONOSTICS - {status_text} 🤖                ║</b>
+{status_icon} <b>║                                                          ║</b>
+{status_icon} <b>╚══════════════════════════════════════════════════════════╝</b>
 
-{frame} <b>RECHERCHE EN COURS...</b> {frame}
-⏳ Dernière vérification : {now.strftime('%H:%M:%S')}
-⚽ Matchs trouvés : {len(today_matches_cache)}
-🔄 Scan du site : chaque seconde
+<b>{frame} RECHERCHE EN COURS... {frame}</b>
 
-📡 Surveillance active 24h/24
+⏳ Dernier scan : <b>{now.strftime('%H:%M:%S')}</b>
+⚽ Matchs trouvés : <b>{len(today_matches_cache)}</b>
+{dot} Statut : <b>{status_text}</b>
+🔄 Vérification : <u>chaque seconde</u>
+
+┌──────────────────────────────────────────────────────────┐
+│  📡 Surveillance active 24h/24                          │
+│  🔔 Nouveaux matchs = notification immédiate            │
+└──────────────────────────────────────────────────────────┘
 """
     keyboard = {
         'inline_keyboard': [
-            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}]
+            [{'text': '📅 VOIR MATCHS', 'callback_data':refresh'}],
+            [{'text': '🔄 STATUT', 'callback_data': 'status'}]
         ]
     }
     
@@ -152,7 +184,7 @@ def get_today_matches():
         
         matches = []
         today = datetime.now().strftime('%d.%m.%Y')
-        seen_teams = set()  # Pour éviter les doublons
+        seen_teams = set()
         
         for row in soup.find_all('tr'):
             cells = row.find_all('td')
@@ -161,7 +193,6 @@ def get_today_matches():
                 if today in date_text:
                     teams = cells[1].get_text(strip=True)
                     
-                    # Éviter les doublons
                     if teams in seen_teams:
                         continue
                     seen_teams.add(teams)
@@ -181,7 +212,7 @@ def get_today_matches():
                         'time': match_time
                     })
         
-        # Retirer les doublons par nom d'équipe
+        # Supprimer les doublons
         unique_matches = []
         seen = set()
         for match in matches:
@@ -195,7 +226,7 @@ def get_today_matches():
         return []
 
 def create_match_display():
-    """Crée l'affichage des matchs - sans doublons"""
+    """Crée l'affichage des matchs"""
     global today_matches_cache
     now = datetime.now()
     
@@ -298,7 +329,6 @@ def check_and_update():
         current_matches = get_today_matches()
         current_ids = {m['id'] for m in current_matches}
         
-        # Filtrer les nouveaux matchs
         new_matches = [m for m in current_matches if m['id'] not in last_match_ids]
         
         if new_matches:
@@ -307,8 +337,17 @@ def check_and_update():
             for match in new_matches:
                 icon = get_match_icon(match['time'])
                 notification = f"""
-════════════════════ NOUVEAU MATCH ════════════════════
-
+╔════════════════════ NOUVEAU MATCH ════════════════════╗
+║                                                       ║
+║   {icon} <b>{match['teams']}</b>
+║                                                       ║
+║   🎯 Pronostic : {match['prediction']}
+║   💰 Cote      : {match['odds']}
+║   🕐 Horaire   : {match['time']}
+║                                                       ║
+║   🔔 Match ajouté automatiquement                     ║
+║                                                       ║
+╚═══════════════════════════════════════════════════════╝
 """
                 send_message(notification)
                 time.sleep(0.5)
@@ -326,11 +365,16 @@ def check_and_update():
     
     is_fetching = False
 
-def status_animation_loop():
-    """Boucle pour l'animation du statut toutes les 5 secondes"""
+def online_indicator_loop():
+    """Boucle pour l'indicateur clignotant - toutes les 1 seconde"""
+    print("🟢 Indicateur de statut en ligne - mise à jour chaque seconde")
     while True:
-        time.sleep(5)
-        update_status_animation()
+        try:
+            update_online_indicator()
+            time.sleep(1)
+        except Exception as e:
+            print(f"❌ Erreur indicateur: {e}")
+            time.sleep(5)
 
 def bot_loop():
     """Boucle principale - vérifie chaque seconde"""
@@ -371,6 +415,16 @@ def test_greeting():
     send_daily_greeting()
     return jsonify({'status': 'greeting sent'})
 
+@app.route('/status')
+def status():
+    """Route pour voir le statut détaillé"""
+    return jsonify({
+        'online': True,
+        'matches': len(today_matches_cache),
+        'last_scan': datetime.now().strftime('%H:%M:%S'),
+        'fetching': is_fetching
+    })
+
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
@@ -384,24 +438,25 @@ if __name__ == '__main__':
         except:
             pass
     
-    # Envoyer message de statut avec animation
-    send_status_message()
+    # Envoyer l'indicateur de statut en ligne
+    send_online_indicator()
+    time.sleep(2)
     
-    # Démarrer l'animation du statut
-    status_thread = threading.Thread(target=status_animation_loop, daemon=True)
-    status_thread.start()
+    # Démarrer l'indicateur clignotant (toutes les 1 seconde)
+    indicator_thread = threading.Thread(target=online_indicator_loop, daemon=True)
+    indicator_thread.start()
     
     # Démarrer le bot
     bot_thread = threading.Thread(target=bot_loop, daemon=True)
     bot_thread.start()
     
     print("=" * 50)
-    print("🤖 BOT PRONOSTICS - VERSION AMÉLIORÉE")
+    print("🤖 BOT PRONOSTICS - VERSION AVEC INDICATEUR EN LIGNE")
     print("=" * 50)
     print(f"✅ Bot démarré avec succès!")
     print(f"🔄 Vérification: chaque seconde")
+    print(f"🟢 Indicateur clignotant: toutes les 1 seconde")
     print(f"📊 Éviter les doublons: activé")
-    print(f"🟢 Message statut: toutes les 5 secondes")
     print("=" * 50)
     
     port = int(os.environ.get('PORT', 10000))
