@@ -77,9 +77,9 @@ def send_online_indicator():
     global last_status_message_id
     
     message = """🟢 <b>╔══════════════════════════════════════════════════════════╗</b>
-🟢 <b>║                                                          ║</b>
-🟢 <b>║           🤖 BOT PRONOSTICS - EN LIGNE 🤖                ║</b>
-🟢 <b>║                                                          ║</b>
+🟢 <b>║                                                          </b>
+🟢 <b>║           🤖 BOT PRONOSTICS - EN LIGNE 🤖                </b>
+🟢 <b>║                                                          </b>
 🟢 <b>╚══════════════════════════════════════════════════════════╝</b>
 
 <b>◐ RECHERCHE EN COURS... ◐</b>
@@ -332,16 +332,8 @@ def check_and_update():
             for match in new_matches:
                 icon = get_match_icon(match['time'])
                 notification = f"""
-╔════════════════════ NOUVEAU MATCH ════════════════════╗
-║                                                       ║
-║   {icon} <b>{match['teams']}</b>
-║                                                       ║
-║   🎯 Pronostic : {match['prediction']}
-║   💰 Cote      : {match['odds']}
-║   🕐 Horaire   : {match['time']}
-║                                                       ║
-║   🔔 Match ajouté automatiquement                     ║
-║                                                       ║
+╔════════════════════ NOUVEAU MATCH ════════════════════╗                                                   
+          🔔 Match ajouté automatiquement                                                                         
 ╚═══════════════════════════════════════════════════════╝
 """
                 send_message(notification)
