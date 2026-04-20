@@ -75,11 +75,9 @@ def edit_message(message_id, text, keyboard=None):
 def send_online_indicator():
     """Envoie l'indicateur de statut en ligne qui clignote"""
     global last_status_message_id
-    
-    message = """🟢 <b>╔══════════════════════════════════════════════════════════╗</b>
-🟢 <b>║                                                          </b>
-🟢 <b>║           🤖 BOT PRONOSTICS - EN LIGNE 🤖                </b>
-🟢 <b>║                                                          </b>
+    message = """ 
+🟢 <b>╔══════════════════════════════════════════════════════════╗</b>          
+🟢 <b>          🤖 BOT PRONOSTICS - EN LIGNE 🤖                  </b>                                                          
 🟢 <b>╚══════════════════════════════════════════════════════════╝</b>
 
 <b>◐ RECHERCHE EN COURS... ◐</b>
