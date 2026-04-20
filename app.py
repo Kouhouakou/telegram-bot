@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TELEGRAM MATCH PREDICTOR BOT - Version pour Render.com avec message à 8h
+TELEGRAM MATCH PREDICTOR BOT - Version Améliorée
 """
 
 import requests
@@ -26,7 +26,9 @@ last_match_ids = set()
 today_matches_cache = []
 is_fetching = False
 MATCH_STATE_FILE = 'match_state.json'
-last_greeting_day = None  # Pour suivre le dernier jour où le message a été envoyé
+last_greeting_day = None
+last_status_message_id = None
+status_animation_frame = 0
 
 # ==================== FONCTIONS TELEGRAM ====================
 
@@ -45,10 +47,84 @@ def send_message(text, keyboard=None):
     try:
         response = requests.post(url, json=data, timeout=10)
         print(f"✅ Message envoyé")
-        return response
+        return response.json().get('result', {}).get('message_id') if response.ok else None
     except Exception as e:
         print(f"❌ Erreur envoi: {e}")
         return None
+
+def edit_message(message_id, text, keyboard=None):
+    """Modifie un message existant"""
+    if not message_id:
+        return
+    url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
+    data = {
+        'chat_id': CHAT_ID,
+        'message_id': message_id,
+        'text': text,
+        'parse_mode': 'HTML'
+    }
+    if keyboard:
+        data['reply_markup'] = json.dumps(keyboard)
+    try:
+        requests.post(url, json=data, timeout=10)
+    except:
+        pass
+
+# ==================== MESSAGE DE STATUT EN LIGNE ====================
+
+def send_status_message():
+    """Envoie le message de statut qui sera mis à jour toutes les 5 secondes"""
+    global last_status_message_id
+    
+    message = """🟢 <b>BOT EN LIGNE</b>
+
+🔄 EN RECHERCHE DE NOUVEAUX MATCHS...
+⏳ Vérification du site : chaque seconde
+
+📊 Statut actif depuis le démarrage
+"""
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}]
+        ]
+    }
+    
+    if last_status_message_id:
+        edit_message(last_status_message_id, message, keyboard)
+    else:
+        msg_id = send_message(message, keyboard)
+        if msg_id:
+            last_status_message_id = msg_id
+
+def update_status_animation():
+    """Met à jour l'animation du message de statut toutes les 5 secondes"""
+    global last_status_message_id, status_animation_frame
+    
+    if not last_status_message_id:
+        return
+    
+    status_animation_frame += 1
+    frames = ["◐", "◓", "◑", "◒"]
+    frame = frames[status_animation_frame % 4]
+    
+    now = datetime.now()
+    
+    message = f"""🟢 <b>BOT EN LIGNE</b>
+
+{frame} <b>RECHERCHE EN COURS...</b> {frame}
+⏳ Dernière vérification : {now.strftime('%H:%M:%S')}
+⚽ Matchs trouvés : {len(today_matches_cache)}
+🔄 Scan du site : chaque seconde
+
+📡 Surveillance active 24h/24
+"""
+    keyboard = {
+        'inline_keyboard': [
+            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}]
+        ]
+    }
+    
+    edit_message(last_status_message_id, message, keyboard)
 
 # ==================== FONCTIONS DE SCRAPING ====================
 
@@ -68,7 +144,7 @@ def get_match_icon(match_time):
     return "⚽"
 
 def get_today_matches():
-    """Récupère les matchs du jour"""
+    """Récupère les matchs du jour - sans doublons"""
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         response = requests.get(URL, headers=headers, timeout=15)
@@ -76,6 +152,7 @@ def get_today_matches():
         
         matches = []
         today = datetime.now().strftime('%d.%m.%Y')
+        seen_teams = set()  # Pour éviter les doublons
         
         for row in soup.find_all('tr'):
             cells = row.find_all('td')
@@ -83,6 +160,12 @@ def get_today_matches():
                 date_text = cells[0].get_text(strip=True)
                 if today in date_text:
                     teams = cells[1].get_text(strip=True)
+                    
+                    # Éviter les doublons
+                    if teams in seen_teams:
+                        continue
+                    seen_teams.add(teams)
+                    
                     prediction = cells[2].get_text(strip=True)
                     odds = cells[3].get_text(strip=True) if len(cells) > 3 else 'N/A'
                     
@@ -97,13 +180,22 @@ def get_today_matches():
                         'date': today,
                         'time': match_time
                     })
-        return matches
+        
+        # Retirer les doublons par nom d'équipe
+        unique_matches = []
+        seen = set()
+        for match in matches:
+            if match['teams'] not in seen:
+                seen.add(match['teams'])
+                unique_matches.append(match)
+        
+        return unique_matches
     except Exception as e:
         print(f"❌ Erreur scraping: {e}")
         return []
 
 def create_match_display():
-    """Crée l'affichage des matchs"""
+    """Crée l'affichage des matchs - sans doublons"""
     global today_matches_cache
     now = datetime.now()
     
@@ -147,7 +239,7 @@ def get_keyboard():
     return {
         'inline_keyboard': [
             [{'text': '🔄 ACTUALISER', 'callback_data': 'refresh'}],
-            [{'text': '📊 DÉTAILS', 'callback_data': 'details'}]
+            [{'text': '📊 VOIR DÉTAILS', 'callback_data': 'details'}]
         ]
     }
 
@@ -166,33 +258,18 @@ def send_daily_greeting():
     now = datetime.now()
     current_day = now.day
     
-    # Vérifier si c'est 8h00 et si on n'a pas déjà envoyé aujourd'hui
     if now.hour == 8 and now.minute == 0 and now.second < 30:
         if last_greeting_day != current_day:
-            # Compter les matchs du jour
             match_count = len(today_matches_cache)
             
-            # Créer le message de bienvenue
             greeting_message = f"""
 ╔══════════════════════════════════════════════════════════╗
-║                                                          ║
 ║                    🌞 BONJOUR ! 🌞                       ║
-║                                                          ║
 ║              ⚽ Vos pronostics du jour !                 ║
-║                                                          ║
 ║         📊 {match_count} match(s) disponible(s)                    ║
-║                                                          ║
-║   📅 Aujourd'hui : {now.strftime('%d/%m/%Y')}                     ║
-║   🕐 Heure : {now.strftime('%H:%M:%S')}                             ║
-║                                                          ║
-║   👆 Consultez les matchs ci-dessus                       ║
-║   🔄 Mise à jour automatique chaque seconde               ║
-║                                                          ║
 ║   🎯 <b>Bonne journée et bons paris !</b>                  ║
-║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
 """
-            # Ajouter la liste des matchs s'il y en a
             if match_count > 0:
                 greeting_message += "\n\n📋 <b>Matchs du jour :</b>\n"
                 for idx, match in enumerate(today_matches_cache[:5], 1):
@@ -200,18 +277,16 @@ def send_daily_greeting():
                 if match_count > 5:
                     greeting_message += f"\n\n... et {match_count - 5} autre(s) match(s)"
             
-            # Envoyer le message
             send_message(greeting_message, get_keyboard())
             last_greeting_day = current_day
-            print(f"🌞 Message de bienvenue envoyé à {now.strftime('%H:%M:%S')} - {match_count} match(s)")
+            print(f"🌞 Message de bienvenue envoyé - {match_count} match(s)")
             return True
-    
     return False
 
 # ==================== SURVEILLANCE ====================
 
 def check_and_update():
-    """Vérifie les nouveaux matchs"""
+    """Vérifie les nouveaux matchs - chaque seconde"""
     global last_match_ids, today_matches_cache, is_fetching
     
     if is_fetching:
@@ -222,6 +297,8 @@ def check_and_update():
     try:
         current_matches = get_today_matches()
         current_ids = {m['id'] for m in current_matches}
+        
+        # Filtrer les nouveaux matchs
         new_matches = [m for m in current_matches if m['id'] not in last_match_ids]
         
         if new_matches:
@@ -230,11 +307,8 @@ def check_and_update():
             for match in new_matches:
                 icon = get_match_icon(match['time'])
                 notification = f"""
-╔════════════════════ NOUVEAU MATCH ════════════════════╗
-║   {icon} <b>{match['teams']}</b>
-║   🎯 {match['prediction']}
-║   💰 {match['odds']}  🕐 {match['time']}
-╚═══════════════════════════════════════════════════════╝
+════════════════════ NOUVEAU MATCH ════════════════════
+
 """
                 send_message(notification)
                 time.sleep(0.5)
@@ -252,22 +326,21 @@ def check_and_update():
     
     is_fetching = False
 
+def status_animation_loop():
+    """Boucle pour l'animation du statut toutes les 5 secondes"""
+    while True:
+        time.sleep(5)
+        update_status_animation()
+
 def bot_loop():
     """Boucle principale - vérifie chaque seconde"""
     print("🔄 Bot démarré - Surveillance active toutes les secondes")
-    print("🌞 Message de bienvenue programmé à 08h00 chaque jour")
     
     while True:
         try:
-            # Vérifier les nouveaux matchs
             check_and_update()
-            
-            # Vérifier et envoyer le message quotidien à 8h
             send_daily_greeting()
-            
-            # Attendre 1 seconde
             time.sleep(1)
-            
         except Exception as e:
             print(f"❌ Erreur boucle: {e}")
             time.sleep(5)
@@ -276,7 +349,6 @@ def bot_loop():
 
 @app.route('/')
 def home():
-    """Page d'accueil pour vérifier que le bot tourne"""
     return jsonify({
         'status': 'online',
         'bot_name': 'Telegram Match Predictor',
@@ -288,16 +360,14 @@ def home():
 
 @app.route('/health')
 def health():
-    """Vérification de santé pour Render"""
     return jsonify({
         'status': 'healthy', 
         'time': datetime.now().isoformat(),
-        'greeting_sent': last_greeting_day is not None
+        'matches': len(today_matches_cache)
     })
 
 @app.route('/test-greeting')
 def test_greeting():
-    """Route de test pour envoyer le message manuellement"""
     send_daily_greeting()
     return jsonify({'status': 'greeting sent'})
 
@@ -314,22 +384,25 @@ if __name__ == '__main__':
         except:
             pass
     
-    # Envoyer message de démarrage
-    send_message("✅ Bot démarré sur Render.com !\n\n🔄 Surveillance active des matchs toutes les secondes.\n🌞 Message de bienvenue chaque jour à 08h00.")
+    # Envoyer message de statut avec animation
+    send_status_message()
     
-    # Démarrer le bot dans un thread séparé
+    # Démarrer l'animation du statut
+    status_thread = threading.Thread(target=status_animation_loop, daemon=True)
+    status_thread.start()
+    
+    # Démarrer le bot
     bot_thread = threading.Thread(target=bot_loop, daemon=True)
     bot_thread.start()
     
     print("=" * 50)
-    print("🤖 BOT PRONOSTICS - SUR RENDER.COM")
+    print("🤖 BOT PRONOSTICS - VERSION AMÉLIORÉE")
     print("=" * 50)
     print(f"✅ Bot démarré avec succès!")
     print(f"🔄 Vérification: chaque seconde")
-    print(f"🌞 Message quotidien: 08h00")
-    print(f"📱 Telegram: actif")
+    print(f"📊 Éviter les doublons: activé")
+    print(f"🟢 Message statut: toutes les 5 secondes")
     print("=" * 50)
     
-    # Démarrer le serveur Flask
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
