@@ -29,7 +29,6 @@ MATCH_STATE_FILE = 'match_state.json'
 last_greeting_day = None
 last_status_message_id = None
 status_animation_frame = 0
-is_bot_online = True
 
 # ==================== FONCTIONS TELEGRAM ====================
 
@@ -71,14 +70,13 @@ def edit_message(message_id, text, keyboard=None):
     except:
         pass
 
-# ==================== INDICATEUR CLIGNOTANT "EN LIGNE" ====================
+# ==================== INDICATEUR CLIGNOTANT ====================
 
 def send_online_indicator():
     """Envoie l'indicateur de statut en ligne qui clignote"""
     global last_status_message_id
     
-    message = """
-🟢 <b>╔══════════════════════════════════════════════════════════╗</b>
+    message = """🟢 <b>╔══════════════════════════════════════════════════════════╗</b>
 🟢 <b>║                                                          ║</b>
 🟢 <b>║           🤖 BOT PRONOSTICS - EN LIGNE 🤖                ║</b>
 🟢 <b>║                                                          ║</b>
@@ -93,8 +91,8 @@ def send_online_indicator():
 ┌──────────────────────────────────────────────────────────┐
 │  💡 Le bot surveille automatiquement les matchs         │
 │  🔔 Un message sera envoyé dès qu'un match apparaît     │
-└──────────────────────────────────────────────────────────┘
-"""
+└──────────────────────────────────────────────────────────┘"""
+    
     keyboard = {
         'inline_keyboard': [
             [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}],
@@ -108,13 +106,12 @@ def send_online_indicator():
 
 def update_online_indicator():
     """Met à jour l'indicateur clignotant toutes les secondes"""
-    global last_status_message_id, status_animation_frame, today_matches_cache
+    global last_status_message_id, status_animation_frame, today_matches_cache, is_fetching
     
     if not last_status_message_id:
         return
     
     status_animation_frame += 1
-    # Animation clignotante
     frames = ["◐", "◓", "◑", "◒"]
     dots = ["⚫", "🟢", "⚫", "🟢"]
     frame = frames[status_animation_frame % 4]
@@ -122,7 +119,6 @@ def update_online_indicator():
     
     now = datetime.now()
     
-    # Changer la couleur selon l'état
     if is_fetching:
         status_icon = "🟡"
         status_text = "SCAN EN COURS"
@@ -130,8 +126,7 @@ def update_online_indicator():
         status_icon = "🟢"
         status_text = "ACTIF"
     
-    message = f"""
-{status_icon} <b>╔══════════════════════════════════════════════════════════╗</b>
+    message = f"""{status_icon} <b>╔══════════════════════════════════════════════════════════╗</b>
 {status_icon} <b>║                                                          ║</b>
 {status_icon} <b>║           🤖 BOT PRONOSTICS - {status_text} 🤖                ║</b>
 {status_icon} <b>║                                                          ║</b>
@@ -147,11 +142,11 @@ def update_online_indicator():
 ┌──────────────────────────────────────────────────────────┐
 │  📡 Surveillance active 24h/24                          │
 │  🔔 Nouveaux matchs = notification immédiate            │
-└──────────────────────────────────────────────────────────┘
-"""
+└──────────────────────────────────────────────────────────┘"""
+    
     keyboard = {
         'inline_keyboard': [
-            [{'text': '📅 VOIR MATCHS', 'callback_data':refresh'}],
+            [{'text': '📅 VOIR MATCHS', 'callback_data': 'refresh'}],
             [{'text': '🔄 STATUT', 'callback_data': 'status'}]
         ]
     }
@@ -417,7 +412,6 @@ def test_greeting():
 
 @app.route('/status')
 def status():
-    """Route pour voir le statut détaillé"""
     return jsonify({
         'online': True,
         'matches': len(today_matches_cache),
@@ -451,7 +445,7 @@ if __name__ == '__main__':
     bot_thread.start()
     
     print("=" * 50)
-    print("🤖 BOT PRONOSTICS - VERSION AVEC INDICATEUR EN LIGNE")
+    print("🤖 BOT PRONOSTICS - VERSION CORRIGÉE")
     print("=" * 50)
     print(f"✅ Bot démarré avec succès!")
     print(f"🔄 Vérification: chaque seconde")
